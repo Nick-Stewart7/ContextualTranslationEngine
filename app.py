@@ -1,5 +1,5 @@
-import streamlit as st
 import asyncio
+import streamlit as st
 from translation_module import translate, process_follow_up, generate_audio, POLLY_VOICES
 
 # Initialize session state
@@ -61,16 +61,16 @@ if st.button("Translate"):
 if st.session_state.translation:
     st.subheader("Translation:")
     st.text_area("Translation:", value=st.session_state.translation, height=100)
-    
+
     if st.session_state.explanation:
         with st.expander("View Explanation"):
             st.write(st.session_state.explanation)
-    
+
     # Generate Audio button
     if st.button("Generate Audio"):
         with st.spinner("Generating audio..."):
             st.session_state.audio_data = asyncio.run(async_generate_audio(st.session_state.translation, target_lang))
-        
+
         if st.session_state.audio_data:
             st.audio(st.session_state.audio_data, format='audio/mp3')
         else:
@@ -96,12 +96,12 @@ if user_input := st.chat_input("Ask a follow-up question about the translation")
         st.markdown(user_input)
         st.empty()
 
-    
+
     # Process the user's input
     with st.chat_message("assistant"):
         with st.spinner("Processing..."):
             context = get_context_for_ai()
-            response = asyncio.run(process_follow_up(context + "\nUser Question:\n" + user_input, source_lang, target_lang))
+            response = asyncio.run(process_follow_up(context + "User Question:\n" + user_input + "\n", source_lang))
             st.markdown(response)
             st.empty()
 

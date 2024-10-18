@@ -1,10 +1,8 @@
-import boto3
 import json
-import io
-import pygame
-import threading
 import asyncio
 from functools import lru_cache
+import boto3
+import pygame
 
 bedrock_runtime = boto3.client(
     service_name='bedrock-runtime',
@@ -49,14 +47,13 @@ SYSTEM_PROMPT = """
         If provided, adhere to client-specific or industry-standard style guides and glossaries. Maintain consistency in terminology and formatting as specified. Remember, your primary goal is to facilitate clear, accurate, and effective communication across linguistic and cultural boundaries. Aim for translations that not only convey the correct information but also read as if they were originally written in the target language. Balance technical accuracy with natural expression to create translations that would impress both language experts and technical professionals in their fluency, appropriateness, and effectiveness in conveying the intended message.
 """
 
-
 async def get_claude_response(messages):
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
         "max_tokens": 1000,
         "messages": messages
     })
-    
+
     try:
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(
@@ -68,10 +65,10 @@ async def get_claude_response(messages):
                 body=body
             )
         )
-        
+
         response_body = json.loads(response['body'].read())
         assistant_message = response_body['content'][0]['text']
-        
+
         return assistant_message
     except Exception as e:
         print(f"Error in Claude response: {str(e)}")
@@ -80,13 +77,13 @@ async def get_claude_response(messages):
 def extract_translation(response):
     # Split the response into lines
     lines = response.split('\n')
-    
+
     # The first non-empty line is likely to be the translation
     translation = next((line.strip() for line in lines if line.strip()), "")
-    
+
     # The rest is considered as explanation
     explanation = '\n'.join(lines[1:]).strip()
-    
+
     return translation, explanation
 
 @lru_cache(maxsize=100)
@@ -96,18 +93,18 @@ async def translate(text, source_lang, target_lang):
         {"role": "assistant", "content": "Hello! I understand that you'd like to discuss technical translations. As an expert multilingual translator specializing in technical and engineering communications, I'm here to assist you. What specific aspect of technical translation would you like to explore or what task can I help you with today?"},
         {"role": "user", "content": f"Please translate the following {source_lang} text to {target_lang}. Please provide the complete translation as the first thing you generate every single time, followed by any explanations or notes on subsequent lines: {text}"}
     ]
-    
+
     response = await get_claude_response(messages)
     if response:
         translation, explanation = extract_translation(response)
         return translation, explanation
     return None, None
 
-async def process_follow_up(question, source_lang, target_lang):
+async def process_follow_up(question, source_lang):
     messages = [
-        {"role": "user", "content": f"Answer the following question about a translation from {source_lang} to {target_lang}: {question}"}
+        {"role": "user", "content": f"You have just translated a passage for the user and your role is to answer any follow up questions or comments they may have. Please reply in {source_lang} unless you are specifically asked to translate or generate a response in another language. You will be provided with the previous translation and the user question. Please reply in kind to the best of your ability. Here is the previous translation and user question: {question}"}
     ]
-    
+
     return await get_claude_response(messages)
 
 async def generate_audio(text, lang):
