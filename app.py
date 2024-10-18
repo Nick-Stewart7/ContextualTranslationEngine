@@ -1,15 +1,22 @@
 import streamlit as st
 import asyncio
-from translation_module import translate, process_follow_up, generate_audio, play_audio, POLLY_VOICES
+from translation_module import translate, process_follow_up, generate_audio, POLLY_VOICES
 
 # Initialize session state
 if 'translation_context' not in st.session_state:
     st.session_state.translation_context = []
 if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
+if 'translation' not in st.session_state:
+    st.session_state.translation = None
+if 'explanation' not in st.session_state:
+    st.session_state.explanation = None
+if 'audio_data' not in st.session_state:
+    st.session_state.audio_data = None
+if 'input_text' not in st.session_state:
+    st.session_state.input_text = ""
 
 def update_context(input_text, translation, source_lang, target_lang):
-    # Keep only the last 5 translations for context
     st.session_state.translation_context.append({
         "input": input_text,
         "output": translation,
@@ -25,6 +32,14 @@ def get_context_for_ai():
         context += f"From {trans['source']} to {trans['target']}: '{trans['input']}' -> '{trans['output']}'\n"
     return context
 
+async def async_translate(text, source_lang, target_lang):
+    translation, explanation = await translate(text, source_lang, target_lang)
+    return translation, explanation
+
+async def async_generate_audio(text, lang):
+    audio_data = await generate_audio(text, lang)
+    return audio_data
+
 st.title("Contextual Translation Engine")
 
 # Sidebar for language selection
@@ -34,34 +49,37 @@ with st.sidebar:
     target_lang = st.selectbox("Target Language", list(POLLY_VOICES.keys()))
 
 # Translation section
-input_text = st.text_area("Enter Text To Translate")
+st.session_state.input_text = st.text_area("Enter Text To Translate", value=st.session_state.input_text)
 
 if st.button("Translate"):
-    if input_text:
+    if st.session_state.input_text:
         with st.spinner("Translating..."):
-            translation = asyncio.run(translate(input_text, source_lang, target_lang))
-        
-        update_context(input_text, translation, source_lang, target_lang)
-        
-        if st.button("Generate Audio"):
-            with st.spinner("Generating audio..."):
-                audio_data = asyncio.run(generate_audio(translation, target_lang))
-            if audio_data:
-                play_audio(audio_data)
-                st.success("Audio played successfully!")
+            st.session_state.translation, st.session_state.explanation = asyncio.run(async_translate(st.session_state.input_text, source_lang, target_lang))
+        update_context(st.session_state.input_text, st.session_state.translation, source_lang, target_lang)
 
-# Display only the most recent translation
-if st.session_state.translation_context:
+# Display translation if available
+if st.session_state.translation:
     st.subheader("Translation:")
-    recent = st.session_state.translation_context[-1]
-    st.write(f"From {recent['source']} to {recent['target']}:")
-    st.write(f"Input: {recent['input']}")
-    st.write(f"Output: {recent['output']}")
+    st.text_area("Translation:", value=st.session_state.translation, height=100)
+    
+    if st.session_state.explanation:
+        with st.expander("View Explanation"):
+            st.write(st.session_state.explanation)
+    
+    # Generate Audio button
+    if st.button("Generate Audio"):
+        with st.spinner("Generating audio..."):
+            st.session_state.audio_data = asyncio.run(async_generate_audio(st.session_state.translation, target_lang))
+        
+        if st.session_state.audio_data:
+            st.audio(st.session_state.audio_data, format='audio/mp3')
+        else:
+            st.error("Failed to generate audio. Please try again.")
 
 st.markdown("---")
 
 # Follow-up Chat section
-st.header("Follow-up Chat")
+st.subheader("Follow-up Chat")
 
 # Display current chat history
 for message in st.session_state.chat_history:
@@ -71,13 +89,13 @@ for message in st.session_state.chat_history:
 
 # User input for follow-up questions
 if user_input := st.chat_input("Ask a follow-up question about the translation"):
-
     # Add user message to chat history
     st.session_state.chat_history.append({"role": "user", "content": user_input})
 
     with st.chat_message("user"):
         st.markdown(user_input)
         st.empty()
+
     
     # Process the user's input
     with st.chat_message("assistant"):
@@ -86,4 +104,5 @@ if user_input := st.chat_input("Ask a follow-up question about the translation")
             response = asyncio.run(process_follow_up(context + "\nUser Question:\n" + user_input, source_lang, target_lang))
             st.markdown(response)
             st.empty()
+
         st.session_state.chat_history.append({"role": "assistant", "content": response})

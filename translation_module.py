@@ -18,10 +18,10 @@ POLLY_VOICES = {
     "dutch": "Lisa",
     "chinese": "Zhiyu",
     "english": "Emma",
-    "french": "Léa",
+    "french": "Remi",
     "german": "Daniel",
     "hindi": "Kajal",
-    "italian": "Adriano",
+    "italian": "Bianca",
     "japanese": "Takumi",
     "korean": "Seoyeon",
     "polish": "Ola",
@@ -49,6 +49,7 @@ SYSTEM_PROMPT = """
         If provided, adhere to client-specific or industry-standard style guides and glossaries. Maintain consistency in terminology and formatting as specified. Remember, your primary goal is to facilitate clear, accurate, and effective communication across linguistic and cultural boundaries. Aim for translations that not only convey the correct information but also read as if they were originally written in the target language. Balance technical accuracy with natural expression to create translations that would impress both language experts and technical professionals in their fluency, appropriateness, and effectiveness in conveying the intended message.
 """
 
+
 async def get_claude_response(messages):
     body = json.dumps({
         "anthropic_version": "bedrock-2023-05-31",
@@ -73,32 +74,34 @@ async def get_claude_response(messages):
         
         return assistant_message
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
+        print(f"Error in Claude response: {str(e)}")
         return None
 
-def play_audio(audio_data):
-    def _play():
-        try:
-            audio_file = io.BytesIO(audio_data)
-            pygame.mixer.music.load(audio_file)
-            pygame.mixer.music.play()
-            while pygame.mixer.music.get_busy():
-                pygame.time.Clock().tick(10)
-        except Exception as e:
-            print(f"Error in audio playback: {str(e)}")
-
-    threading.Thread(target=_play, daemon=True).start()
+def extract_translation(response):
+    # Split the response into lines
+    lines = response.split('\n')
+    
+    # The first non-empty line is likely to be the translation
+    translation = next((line.strip() for line in lines if line.strip()), "")
+    
+    # The rest is considered as explanation
+    explanation = '\n'.join(lines[1:]).strip()
+    
+    return translation, explanation
 
 @lru_cache(maxsize=100)
 async def translate(text, source_lang, target_lang):
     messages = [
         {"role": "user", "content": f"System: {SYSTEM_PROMPT}"},
         {"role": "assistant", "content": "Hello! I understand that you'd like to discuss technical translations. As an expert multilingual translator specializing in technical and engineering communications, I'm here to assist you. What specific aspect of technical translation would you like to explore or what task can I help you with today?"},
-        {"role": "user", "content": f"Please translate the following {source_lang} text to {target_lang}: {text}"}
+        {"role": "user", "content": f"Please translate the following {source_lang} text to {target_lang}. Please provide the complete translation as the first thing you generate every single time, followed by any explanations or notes on subsequent lines: {text}"}
     ]
     
-    translation = await get_claude_response(messages)
-    return translation
+    response = await get_claude_response(messages)
+    if response:
+        translation, explanation = extract_translation(response)
+        return translation, explanation
+    return None, None
 
 async def process_follow_up(question, source_lang, target_lang):
     messages = [
